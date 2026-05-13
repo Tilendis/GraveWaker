@@ -8,6 +8,16 @@
 
 ---
 
+## 截图
+
+![搜索界面](demonstrate/display1.png)
+
+![知识地图](demonstrate/display2.png)
+
+![搜索结果与地图联动](demonstrate/display3.png)
+
+---
+
 ## 功能
 
 - **语义搜索** — 用自然语言描述你想找的内容，不是关键词匹配
