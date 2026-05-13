@@ -10,11 +10,11 @@
 
 ## 截图
 
-![搜索界面](demonstrate/display1.png)
+![搜索‘理财’](demonstrate/display1.png)
 
-![知识地图](demonstrate/display2.png)
+![搜索‘政治’](demonstrate/display2.png)
 
-![搜索结果与地图联动](demonstrate/display3.png)
+![知识地图展示具体信息](demonstrate/display3.png)
 
 ---
 
