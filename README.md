@@ -26,7 +26,7 @@
 ### 安装
 
 ```bash
-git clone https://github.com/yourname/GraveWaker.git
+git clone https://github.com/Tilendis/GraveWaker.git
 cd GraveWaker
 pip install -r requirements.txt
 ```
