@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GraveWaker — 数字掘墓人</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Microsoft YaHei", sans-serif; background: #0f0f0f; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; }
+
+  .header { padding: 16px 24px; border-bottom: 1px solid #2a2a2a; display: flex; align-items: center; gap: 16px; }
+  .header h1 { font-size: 20px; color: #c4b5fd; white-space: nowrap; }
+  .search-box { flex: 1; max-width: 600px; display: flex; gap: 8px; }
+  .search-box input { flex: 1; padding: 10px 16px; border: 1px solid #3a3a3a; border-radius: 8px; background: #1a1a1a; color: #e0e0e0; font-size: 14px; outline: none; transition: border-color 0.2s; }
+  .search-box input:focus { border-color: #c4b5fd; }
+  .search-box button { padding: 10px 20px; border: none; border-radius: 8px; background: #7c3aed; color: #fff; font-size: 14px; cursor: pointer; transition: background 0.2s; }
+  .search-box button:hover { background: #6d28d9; }
+  .stats { font-size: 12px; color: #888; white-space: nowrap; }
+
+  .main { flex: 1; display: flex; overflow: hidden; }
+  .results-panel { width: 360px; min-width: 280px; overflow-y: auto; border-right: 1px solid #2a2a2a; padding: 16px; }
+  .results-panel h3 { font-size: 14px; color: #888; margin-bottom: 12px; }
+  .result-item { padding: 12px; margin-bottom: 8px; border-radius: 8px; background: #1a1a1a; cursor: pointer; transition: background 0.15s; border: 1px solid transparent; }
+  .result-item:hover { background: #252525; border-color: #3a3a3a; }
+  .result-item.active { border-color: #7c3aed; background: #1e1b2e; }
+  .result-item .title { font-size: 14px; font-weight: 600; margin-bottom: 4px; color: #e0e0e0; }
+  .result-item .meta { font-size: 12px; color: #888; }
+  .result-item .meta span { margin-right: 12px; }
+  .result-item .excerpt { font-size: 12px; color: #666; margin-top: 6px; line-height: 1.5; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 4px; font-size: 11px; }
+  .badge-bilibili { background: #fb729926; color: #fb7299; }
+  .badge-bookmark { background: #3b82f626; color: #3b82f6; }
+
+  .map-panel { flex: 1; position: relative; overflow: hidden; }
+  #map { position: absolute; left: 0; right: 0; top: 0; bottom: 0; }
+  .empty-state { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #555; z-index: 10; pointer-events: none; }
+  .empty-state p { margin-top: 8px; font-size: 14px; }
+
+  .loading { text-align: center; padding: 40px; color: #888; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>GraveWaker</h1>
+  <div class="search-box">
+    <input type="text" id="searchInput" placeholder="描述你想找的内容，比如「机器学习入门教程」..." autofocus>
+    <button onclick="doSearch()">掘墓</button>
+  </div>
+  <div class="stats" id="stats">--</div>
+</div>
+
+<div class="main">
+  <div class="results-panel" id="resultsPanel">
+    <h3>搜索结果</h3>
+    <div class="empty-state"><p>输入关键词，开始挖掘</p></div>
+  </div>
+  <div class="map-panel">
+    <div id="map"></div>
+    <div class="empty-state" id="mapEmpty"><p>搜索后这里会显示知识地图</p></div>
+  </div>
+</div>
+
+<script>
+let currentResults = [];
+let currentMapNodes = [];
+let currentMapEdges = [];
+let chart = null;
+let chartInited = false;
+
+function initChart() {
+  if (chartInited) return;
+  chart = echarts.init(document.getElementById('map'));
+  chartInited = true;
+  window.addEventListener('resize', () => chart.resize());
+}
+
+function sourceBadge(type) {
+  const map = { bilibili: 'badge-bilibili', bookmark: 'badge-bookmark' };
+  const names = { bilibili: 'B站', bookmark: '书签' };
+  return `<span class="badge ${map[type] || ''}">${names[type] || type}</span>`;
+}
+
+function renderResults(results) {
+  const panel = document.getElementById('resultsPanel');
+  if (!results.length) {
+    panel.innerHTML = '<h3>搜索结果</h3><div class="empty-state"><p>没有找到相关内容</p></div>';
+    return;
+  }
+  let html = `<h3>搜索结果 (${results.length})</h3>`;
+  results.forEach((r, i) => {
+    html += `
+      <div class="result-item" id="result-${i}" data-idx="${i}">
+        <div class="title">${escapeHtml(r.title)} ${sourceBadge(r.source_type)}</div>
+        <div class="meta">
+          <span>相似度: ${(r.score * 100).toFixed(0)}%</span>
+          ${r.date_collected ? `<span>收藏: ${r.date_collected}</span>` : ''}
+        </div>
+        <div class="excerpt">${escapeHtml(r.excerpt)}</div>
+      </div>`;
+  });
+  panel.innerHTML = html;
+
+  // 绑定点击事件
+  panel.querySelectorAll('.result-item').forEach((el) => {
+    el.addEventListener('click', () => {
+      const idx = parseInt(el.dataset.idx);
+      highlightResultItem(idx);
+      highlightMapNode(currentResults[idx].item_id);
+    });
+  });
+}
+
+function highlightResultItem(idx) {
+  document.querySelectorAll('.result-item').forEach(el => el.classList.remove('active'));
+  const target = document.getElementById('result-' + idx);
+  if (target) {
+    target.classList.add('active');
+    target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function highlightMapNode(itemId) {
+  if (!chart || !chartInited) return;
+  // 找到对应节点的 dataIndex
+  const nodeIdx = currentMapNodes.findIndex(n => n.id === itemId || (n.data && n.data.id === itemId));
+  if (nodeIdx >= 0) {
+    // 先取消所有高亮，再高亮当前节点 + 相邻节点（视觉冲击强）
+    chart.dispatchAction({ type: 'downplay' });
+    chart.dispatchAction({ type: 'highlight', dataIndex: nodeIdx });
+    chart.dispatchAction({ type: 'focusNodeAdjacency', dataIndex: nodeIdx });
+    chart.dispatchAction({ type: 'showTip', dataIndex: nodeIdx });
+  }
+}
+
+function buildMap(searchResults) {
+  initChart();
+  const ids = searchResults.map(r => r.item_id).join(',');
+  if (!ids) return;
+
+  chart.showLoading();
+
+  fetch(`/api/map?ids=${encodeURIComponent(ids)}`)
+    .then(resp => resp.json())
+    .then(data => {
+      const sourceColors = { bilibili: '#fb7299', bookmark: '#3b82f6' };
+      const dimColors = { bilibili: '#5c2a3a', bookmark: '#1e3a5c' };
+
+      const nodes = data.nodes.map(n => ({
+        id: n.id,
+        name: n.title.length > 25 ? n.title.slice(0, 25) + '...' : n.title,
+        symbolSize: n.primary ? 16 : 8,
+        itemStyle: { color: n.primary ? (sourceColors[n.source_type] || '#888') : (dimColors[n.source_type] || '#444') },
+        category: n.primary ? 'primary' : 'related',
+        data: n,
+        label: { show: n.primary, fontSize: 10, color: '#ccc' },
+      }));
+
+      const edges = data.edges.map(e => ({
+        source: e.source,
+        target: e.target,
+        lineStyle: {
+          opacity: Math.max(0.15, e.score * 0.7),
+          width: 0.5 + e.score * 3,
+          color: e.score > 0.7 ? '#7c3aed' : '#444',
+        },
+      }));
+
+      currentMapNodes = nodes;
+      currentMapEdges = edges;
+
+      const option = {
+        backgroundColor: '#0f0f0f',
+        tooltip: {
+          formatter: p => p.data?.data
+            ? `<b>${p.data.data.title}</b><br/>平台: ${p.data.data.source_type}<br/>收藏: ${p.data.data.date_collected || '未知'}`
+            : p.name,
+        },
+        legend: {
+          data: [
+            { name: 'primary', textStyle: { color: '#aaa' } },
+            { name: 'related', textStyle: { color: '#555' } },
+          ],
+          top: 10, left: 10,
+          selectedMode: false,
+        },
+        series: [{
+          type: 'graph',
+          layout: 'force',
+          categories: [
+            { name: 'primary', itemStyle: { color: '#fb7299' } },
+            { name: 'related', itemStyle: { color: '#444' } },
+          ],
+          data: nodes,
+          links: edges,
+          roam: true,
+          draggable: true,
+          force: { repulsion: 300, gravity: 0.08, edgeLength: [80, 300] },
+          emphasis: {
+            focus: 'none',          // hover 不触发，只有 dispatchAction('highlight') 才触发
+            scale: 4.0,
+            itemStyle: { shadowBlur: 12, shadowColor: '#c4b5fd' },
+            label: { show: true, fontSize: 11 },
+          },
+          blur: { itemStyle: { opacity: 0.12 }, lineStyle: { opacity: 0.04 } },
+          lineStyle: { curveness: 0.2 },
+        }],
+      };
+
+      // 先 setOption 再 hideLoading — 消除白屏
+      chart.setOption(option, true);
+      chart.resize();
+      chart.hideLoading();
+
+      document.getElementById('mapEmpty').style.display = 'none';
+
+      // 点地图节点 → 高亮 + 串联，不重载
+      chart.off('click');
+      chart.on('click', params => {
+        if (params.dataType === 'node' && params.data?.data?.id) {
+          const nodeId = params.data.data.id;
+          // 在搜索结果中找到对应项并高亮
+          const resultIdx = currentResults.findIndex(r => r.item_id === nodeId);
+          if (resultIdx >= 0) {
+            highlightResultItem(resultIdx);
+          }
+          highlightMapNode(nodeId);
+        }
+      });
+    });
+}
+
+async function doSearch() {
+  const q = document.getElementById('searchInput').value.trim();
+  if (!q) return;
+
+  const panel = document.getElementById('resultsPanel');
+  panel.innerHTML = '<div class="loading">搜索中...</div>';
+
+  const resp = await fetch(`/api/search?q=${encodeURIComponent(q)}&top_k=20&min_score=0.3`);
+  const data = await resp.json();
+  currentResults = data.results;
+  renderResults(data.results);
+
+  if (data.results.length > 0) {
+    buildMap(data.results);
+    highlightResultItem(0);
+    // 地图构建完成后高亮第一个结果
+    setTimeout(() => highlightMapNode(data.results[0].item_id), 500);
+  }
+}
+
+async function loadStats() {
+  try {
+    const resp = await fetch('/api/stats');
+    const data = await resp.json();
+    if (data.total_items > 0) {
+      const parts = [];
+      for (const [k, v] of Object.entries(data.by_source)) {
+        parts.push(`${k}: ${v}`);
+      }
+      document.getElementById('stats').textContent = `已索引 ${data.total_items} 条 | ${parts.join(' | ')}`;
+    }
+  } catch {}
+}
+
+function escapeHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+document.getElementById('searchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doSearch();
+});
+
+loadStats();
+</script>
+</body>
+</html>

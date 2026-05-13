@@ -1,0 +1,43 @@
+# ============================================================
+# GraveWaker 配置文件 — 复制为 config.yaml 后填写
+# ============================================================
+
+# --- B站数据源 ---
+bilibili:
+  # 你的B站用户UID（打开B站个人主页，网址里的数字就是）
+  uid: ""
+  # 默认收藏夹ID（打开你的B站收藏页，网址 ?fid= 后面的数字）
+  fid: ""
+  # Cookie：登录B站后 F12 → Application → Cookies → 复制 SESSDATA 的值
+  cookie: ""
+
+# --- 浏览器书签 ---
+bookmarks:
+  # 浏览器导出书签HTML文件的路径
+  # Chrome: 书签管理器 → 导出书签
+  # 把导出的 .html 文件放到 data/raw/ 目录下，然后填文件名
+  path: "data/raw/bookmarks.html"
+
+# --- 数据存储 ---
+storage:
+  data_dir: "./data"
+
+# --- LLM API（用于内容摘要和报告生成）---
+llm:
+  provider: "deepseek"
+  deepseek:
+    api_key: ""
+  qwen:
+    api_key: ""
+
+# --- 嵌入模型（本地运行，用于语义搜索）---
+embedding:
+  model: "BAAI/bge-small-zh-v1.5"
+
+# --- 邮件报告（可选）---
+email:
+  smtp_server: "smtp.qq.com"
+  smtp_port: 587
+  from_email: ""
+  to_email: ""
+  password: ""

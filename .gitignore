@@ -1,0 +1,19 @@
+# 个人信息 — 含 Cookie、API Key、UID 等敏感数据
+config.yaml
+
+# 原始数据 — 从平台导出的收藏/书签内容，属于个人隐私
+data/
+
+# 临时文件 / 草稿
+worker
+*.txt
+.claude/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+env/
+
+# 模型缓存
+.cache/
